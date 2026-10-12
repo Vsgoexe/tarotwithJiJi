@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #FAF6F2;
+  --color-ivory: #FFFDFB;
+  --color-blush-100: #FBEDEF;
+  --color-blush-300: #F4D9DF;
+  --color-rose-400: #E8B4C0;
+  --color-wine-600: #7A2E45;
+  --color-wine-700: #62243A;
+  --color-ink: #3A2A2E;
+  --color-ink-soft: #7C6A6F;
+  --color-gold-hair: #C9A27A;
+
+  --font-serif: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+  --font-sans: var(--font-inter), Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-script: var(--font-pinyon), "Pinyon Script", cursive;
+
+  --shadow-card: 0 20px 50px -30px rgba(122, 46, 69, 0.25);
+  --shadow-polaroid: 0 16px 36px -16px rgba(58, 42, 46, 0.22), 0 4px 10px -2px rgba(58, 42, 46, 0.06);
+}
+
+:root {
+  --bg-paper: #FAF6F2;
+  --text-ink: #3A2A2E;
+  --text-ink-soft: #7C6A6F;
+  --border-blush: #F4D9DF;
+  --color-wine: #7A2E45;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: #FAF6F2;
+  color: #3A2A2E;
+}
+
+body {
+  background-color: #FAF6F2;
+  color: #3A2A2E;
+  font-family: var(--font-inter), Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.7;
+  font-size: 1.0625rem; /* ~17px body */
+  position: relative;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle paper texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("/images/texture-paper.svg");
+  background-repeat: repeat;
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Accessible focus ring in wine-600 */
+:focus-visible {
+  outline: 2px solid #7A2E45;
+  outline-offset: 3px;
+}
+
+/* Selection style */
+::selection {
+  background-color: #F4D9DF;
+  color: #7A2E45;
+}
+
+/* Fluid display heading utilities */
+.display-title {
+  font-family: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(2.5rem, 6vw, 4.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+
+.section-title {
+  font-family: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  font-weight: 500;
+}
+
+.script-accent {
+  font-family: var(--font-pinyon), "Pinyon Script", cursive;
+  font-style: normal;
+  font-weight: 400;
+}
+
+/* Card base styling */
+.editorial-card {
+  background-color: #FFFDFB;
+  border: 1px solid #F4D9DF;
+  box-shadow: 0 20px 50px -30px rgba(122, 46, 69, 0.25);
+  border-radius: 1.5rem; /* 24px */
+}
+
+/* Polaroid frame styling */
+.polaroid-frame {
+  background-color: #FFFDFB;
+  padding: 14px 14px 44px 14px;
+  border: 1px solid rgba(244, 217, 223, 0.8);
+  box-shadow: 0 16px 36px -16px rgba(58, 42, 46, 0.22), 0 4px 10px -2px rgba(58, 42, 46, 0.06);
+  border-radius: 4px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.polaroid-frame:hover {
+  box-shadow: 0 24px 45px -18px rgba(122, 46, 69, 0.28), 0 6px 14px -3px rgba(58, 42, 46, 0.08);
+}
