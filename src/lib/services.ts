@@ -20,7 +20,7 @@ export const AUTHORITATIVE_SERVICES: Service[] = [
     duration_minutes: 60,
     turnaround_hours: null,
     price_inr: 99900, // ₹999 in paise
-    price_usd: 1200, // $12 in cents
+    price_usd: 3900, // $39 in cents
     image: "/images/services/tarot-1hr.jpg",
     is_active: true,
     sort_order: 1,
@@ -35,7 +35,7 @@ export const AUTHORITATIVE_SERVICES: Service[] = [
     duration_minutes: 10,
     turnaround_hours: null,
     price_inr: 20000, // ₹200 in paise
-    price_usd: 300, // $3 in cents
+    price_usd: 1200, // $12 in cents
     image: "/images/services/tarot-10min.jpg",
     is_active: true,
     sort_order: 2,
@@ -50,7 +50,7 @@ export const AUTHORITATIVE_SERVICES: Service[] = [
     duration_minutes: null,
     turnaround_hours: 48,
     price_inr: 30000, // ₹300 in paise
-    price_usd: 400, // $4 in cents
+    price_usd: 1500, // $15 in cents
     image: "/images/services/pick-a-card.jpg",
     is_active: true,
     sort_order: 3,
@@ -65,7 +65,7 @@ export const AUTHORITATIVE_SERVICES: Service[] = [
     duration_minutes: null,
     turnaround_hours: 48,
     price_inr: 30000, // ₹300 in paise
-    price_usd: 400, // $4 in cents
+    price_usd: 1500, // $15 in cents
     image: "/images/services/future-predictions.jpg",
     is_active: true,
     sort_order: 4,
@@ -80,7 +80,7 @@ export const AUTHORITATIVE_SERVICES: Service[] = [
     duration_minutes: null,
     turnaround_hours: 48,
     price_inr: 15000, // ₹150 in paise
-    price_usd: 200, // $2 in cents
+    price_usd: 900, // $9 in cents
     image: "/images/services/birth-chart.jpg",
     is_active: true,
     sort_order: 5,
@@ -95,7 +95,7 @@ export const AUTHORITATIVE_SERVICES: Service[] = [
     duration_minutes: null,
     turnaround_hours: 48,
     price_inr: 15000, // ₹150 in paise
-    price_usd: 200, // $2 in cents
+    price_usd: 900, // $9 in cents
     image: "/images/services/career.jpg",
     is_active: true,
     sort_order: 6,
@@ -110,12 +110,23 @@ export const AUTHORITATIVE_SERVICES: Service[] = [
     duration_minutes: null,
     turnaround_hours: 48,
     price_inr: 20000, // ₹200 in paise
-    price_usd: 300, // $3 in cents
+    price_usd: 1200, // $12 in cents
     image: "/images/services/love.jpg",
     is_active: true,
     sort_order: 7,
   },
 ];
+
+/**
+ * Feature flag for international/USD payments.
+ * When false, INR is enforced everywhere and USD toggle is hidden.
+ */
+export function isUSDPaymentsEnabled(): boolean {
+  return (
+    process.env.NEXT_PUBLIC_ENABLE_USD_PAYMENTS === "true" ||
+    process.env.ENABLE_USD_PAYMENTS === "true"
+  );
+}
 
 /**
  * Get dedicated aesthetic photograph for a service
@@ -134,14 +145,14 @@ export function getServiceImage(slug: string, fallbackType: "live" | "written" =
 }
 
 /**
- * Get USD price in cents for a service, falling back to exchange rate (~85 INR/USD)
+ * Get USD price in cents strictly from service definition.
+ * Dynamic exchange rate calculation is strictly removed.
  */
 export function getServicePriceUSD(service: Service): number {
   if (service.price_usd !== null && service.price_usd !== undefined) {
     return service.price_usd;
   }
-  const rupees = service.price_inr / 100;
-  return Math.max(1, Math.round(rupees / 85)) * 100;
+  return 0;
 }
 
 /**
@@ -175,7 +186,7 @@ export function formatPriceUSD(cents: number | null): string | null {
  * Unified price formatter based on selected currency
  */
 export function formatServicePrice(service: Service, currency: "INR" | "USD"): string {
-  if (currency === "USD") {
+  if (currency === "USD" && isUSDPaymentsEnabled()) {
     const cents = getServicePriceUSD(service);
     return formatPriceUSD(cents) || "$0";
   }

@@ -12,7 +12,7 @@ import { useCurrency } from "@/context/CurrencyContext";
 export const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { currency, setCurrency } = useCurrency();
+  const { currency, setCurrency, isUSDEnabled } = useCurrency();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -66,37 +66,39 @@ export const Header: React.FC = () => {
 
         {/* Right Actions: Currency Toggle + CTA Button */}
         <div className="hidden md:flex items-center gap-5">
-          {/* Subtle currency toggle */}
-          <div
-            className="flex items-center p-1 rounded-full bg-blush-100 border border-blush-300 text-xs font-medium"
-            role="group"
-            aria-label="Select Currency"
-          >
-            <button
-              type="button"
-              onClick={() => setCurrency("INR")}
-              className={cn(
-                "px-2.5 py-1 rounded-full transition-all duration-200 cursor-pointer",
-                currency === "INR"
-                  ? "bg-wine-600 text-ivory font-semibold shadow-xs"
-                  : "text-ink-soft hover:text-ink"
-              )}
+          {/* Subtle currency toggle (shown only when USD payments enabled) */}
+          {isUSDEnabled && (
+            <div
+              className="flex items-center p-1 rounded-full bg-blush-100 border border-blush-300 text-xs font-medium"
+              role="group"
+              aria-label="Select Currency"
             >
-              ₹ INR
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrency("USD")}
-              className={cn(
-                "px-2.5 py-1 rounded-full transition-all duration-200 cursor-pointer",
-                currency === "USD"
-                  ? "bg-wine-600 text-ivory font-semibold shadow-xs"
-                  : "text-ink-soft hover:text-ink"
-              )}
-            >
-              $ USD
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setCurrency("INR")}
+                className={cn(
+                  "px-2.5 py-1 rounded-full transition-all duration-200 cursor-pointer",
+                  currency === "INR"
+                    ? "bg-wine-600 text-ivory font-semibold shadow-xs"
+                    : "text-ink-soft hover:text-ink"
+                )}
+              >
+                ₹ INR
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency("USD")}
+                className={cn(
+                  "px-2.5 py-1 rounded-full transition-all duration-200 cursor-pointer",
+                  currency === "USD"
+                    ? "bg-wine-600 text-ivory font-semibold shadow-xs"
+                    : "text-ink-soft hover:text-ink"
+                )}
+              >
+                $ USD
+              </button>
+            </div>
+          )}
 
           <Button href="/services" size="sm" variant="primary">
             Book a reading
@@ -162,37 +164,39 @@ export const Header: React.FC = () => {
             </div>
 
             <div className="pt-6 border-t border-blush-300 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-ink-soft font-medium uppercase tracking-wider">
-                  Currency
-                </span>
-                <div className="flex items-center p-0.5 rounded-full bg-blush-100 border border-blush-300 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setCurrency("INR")}
-                    className={cn(
-                      "px-3 py-1 rounded-full transition-all",
-                      currency === "INR"
-                        ? "bg-wine-600 text-ivory font-medium"
-                        : "text-ink-soft"
-                    )}
-                  >
-                    INR
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCurrency("USD")}
-                    className={cn(
-                      "px-3 py-1 rounded-full transition-all",
-                      currency === "USD"
-                        ? "bg-wine-600 text-ivory font-medium"
-                        : "text-ink-soft"
-                    )}
-                  >
-                    USD
-                  </button>
+              {isUSDEnabled && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-ink-soft font-medium uppercase tracking-wider">
+                    Currency
+                  </span>
+                  <div className="flex items-center p-0.5 rounded-full bg-blush-100 border border-blush-300 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setCurrency("INR")}
+                      className={cn(
+                        "px-3 py-1 rounded-full transition-all",
+                        currency === "INR"
+                          ? "bg-wine-600 text-ivory font-medium"
+                          : "text-ink-soft"
+                      )}
+                    >
+                      INR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrency("USD")}
+                      className={cn(
+                        "px-3 py-1 rounded-full transition-all",
+                        currency === "USD"
+                          ? "bg-wine-600 text-ivory font-medium"
+                          : "text-ink-soft"
+                      )}
+                    >
+                      USD
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <Button
                 href="/services"

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findService, getServicePriceUSD } from "@/lib/services";
+import { findService } from "@/lib/services";
 import { ContactMode } from "@/types/service";
-import { siteConfig } from "@/config/site";
-
-// In-memory fallback order storage for test and verification
-export const ordersStore: Record<string, any> = {};
+import { createPaymentOrder, getPaymentProviderName } from "@/lib/payments/provider";
+import { getServiceSupabaseClient } from "@/lib/supabase";
 
 function generatePublicId(): string {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -26,7 +24,6 @@ export async function POST(req: NextRequest) {
       question,
       birthDate,
       contactMode,
-      currency = "INR",
     } = body;
 
     if (!serviceSlug) {
@@ -64,64 +61,131 @@ export async function POST(req: NextRequest) {
       resolvedContactMode = contactMode;
     }
 
-    // Price is ALWAYS retrieved server-side in smallest unit (paise/cents)
-    let finalCurrency: "INR" | "USD" = "INR";
-    let finalAmount = service.price_inr; // in paise
+    // In current manual UPI mode and Indian visitors, price is strictly in paise
+    const finalCurrency: "INR" = "INR";
+    const finalAmount = service.price_inr; // in paise (e.g. 99900)
+    const publicId = generatePublicId();
+    const providerName = getPaymentProviderName();
 
-    if (currency === "USD") {
-      finalCurrency = "USD";
-      finalAmount = getServicePriceUSD(service); // in cents
+    // Authoritative payment order generation behind provider switch
+    const paymentResult = await createPaymentOrder({
+      service,
+      publicId,
+      customerName,
+      customerEmail,
+      customerPhone,
+      currency: finalCurrency,
+      finalAmount,
+    });
+
+    // Authoritative database persistence
+    const supabase = getServiceSupabaseClient();
+    if (!supabase) {
+      console.error("Supabase client not configured: Missing SUPABASE environment variables");
+      return NextResponse.json(
+        { error: "Database service unavailable. Please configure environment keys." },
+        { status: 500 }
+      );
     }
 
-    const publicId = generatePublicId();
-    const orderRecord = {
-      id: crypto.randomUUID(),
+    const initialStatus =
+      providerName === "manual_upi" ? "pending_payment" : "pending";
+
+    const { error: dbError } = await supabase.from("orders").insert({
       public_id: publicId,
       service_id: service.id,
-      service_slug: service.slug,
-      service_name: service.name,
-      status: "pending",
+      status: initialStatus,
       customer_name: customerName,
       customer_email: customerEmail,
       customer_phone: customerPhone || null,
       question,
       birth_date: birthDate || null,
       currency: finalCurrency,
-      amount: finalAmount, // strictly server-looked up amount in paise (e.g. 99900)
+      amount: finalAmount, // strictly server-looked up amount in paise
       contact_mode: resolvedContactMode,
-      razorpay_order_id: `order_mock_${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
+      payment_provider: providerName,
+      razorpay_order_id:
+        paymentResult.provider === "razorpay"
+          ? paymentResult.razorpayOrderId
+          : null,
+    });
 
-    // Store order
-    ordersStore[publicId] = orderRecord;
+    if (dbError) {
+      console.error("Failed to insert order into database:", dbError);
+      return NextResponse.json(
+        { error: "Failed to persist order record. Please try again." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      publicId: orderRecord.public_id,
-      razorpayOrderId: orderRecord.razorpay_order_id,
-      amount: orderRecord.amount,
-      currency: orderRecord.currency,
-      contactMode: orderRecord.contact_mode,
-      serviceName: orderRecord.service_name,
-      razorpayCheckoutName: siteConfig.name,
+      publicId,
+      provider: paymentResult.provider,
+      paymentData: paymentResult,
+      serviceName: service.name,
+      contactMode: resolvedContactMode,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Order creation error:", error);
     return NextResponse.json(
-      { error: "Internal server error creating order" },
+      { error: error?.message || "Internal server error creating order" },
       { status: 500 }
     );
   }
 }
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const publicId = searchParams.get("publicId");
+  const publicId = req.nextUrl.searchParams.get("publicId");
 
-  if (!publicId || !ordersStore[publicId]) {
+  if (!publicId) {
+    return NextResponse.json({ error: "publicId parameter is required" }, { status: 400 });
+  }
+
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Database unavailable" }, { status: 500 });
+  }
+
+  const { data: order, error } = await supabase
+    .from("orders")
+    .select(`
+      id,
+      public_id,
+      service_id,
+      status,
+      customer_name,
+      customer_email,
+      customer_phone,
+      question,
+      birth_date,
+      currency,
+      amount,
+      contact_mode,
+      payment_provider,
+      utr,
+      screenshot_path,
+      verified_at,
+      rejection_reason,
+      razorpay_order_id,
+      paid_at,
+      created_at,
+      services:service_id (name, slug, type, duration_minutes)
+    `)
+    .eq("public_id", publicId)
+    .single();
+
+  if (error || !order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ order: ordersStore[publicId] });
+  const serviceInfo = (order as any).services;
+  return NextResponse.json({
+    order: {
+      ...order,
+      service_name: serviceInfo?.name || "Tarot Reading",
+      service_slug: serviceInfo?.slug || "",
+      service_type: serviceInfo?.type || "written",
+    },
+  });
 }

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { Service } from "@/types/service";
-import { formatServicePrice } from "@/lib/services";
+import { formatServicePrice, isUSDPaymentsEnabled } from "@/lib/services";
 
 export type Currency = "INR" | "USD";
 
@@ -10,15 +10,23 @@ interface CurrencyContextType {
   currency: Currency;
   setCurrency: (c: Currency) => void;
   formatPrice: (service: Service) => string;
+  isUSDEnabled: boolean;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const isUSDEnabled = isUSDPaymentsEnabled();
   const [currency, setCurrencyState] = useState<Currency>("INR");
 
   useEffect(() => {
-    // Read saved preference from localStorage or cookie
+    // If USD payments are disabled via feature flag, enforce INR strictly
+    if (!isUSDEnabled) {
+      setCurrencyState("INR");
+      return;
+    }
+
+    // Read saved preference from localStorage or cookie when USD enabled
     try {
       const saved = localStorage.getItem("tarot_currency") as Currency | null;
       if (saved === "INR" || saved === "USD") {
@@ -38,9 +46,14 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch {
       // ignore
     }
-  }, []);
+  }, [isUSDEnabled]);
 
   const setCurrency = (newCurrency: Currency) => {
+    if (!isUSDEnabled && newCurrency === "USD") {
+      setCurrencyState("INR");
+      return;
+    }
+
     setCurrencyState(newCurrency);
     try {
       localStorage.setItem("tarot_currency", newCurrency);
@@ -55,7 +68,7 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, formatPrice }}>
+    <CurrencyContext.Provider value={{ currency, setCurrency, formatPrice, isUSDEnabled }}>
       {children}
     </CurrencyContext.Provider>
   );

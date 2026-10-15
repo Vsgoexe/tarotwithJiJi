@@ -28,7 +28,7 @@ import { Heading } from "@/components/ui/Heading";
 import { FloralCorner } from "@/components/ui/FloralCorner";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { AUTHORITATIVE_SERVICES, getServicePriceUSD } from "@/lib/services";
+import { AUTHORITATIVE_SERVICES, getServicePriceUSD, isUSDPaymentsEnabled } from "@/lib/services";
 import { useCurrency } from "@/context/CurrencyContext";
 import { Service, ContactMode } from "@/types/service";
 
@@ -66,6 +66,12 @@ function BookingFlowContent() {
   // Loading & Submission
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Manual UPI State
+  const [upiPaymentData, setUpiPaymentData] = useState<any>(null);
+  const [utrInput, setUtrInput] = useState("");
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [isSubmittingUtr, setIsSubmittingUtr] = useState(false);
 
   // Sync service from query param if changed
   useEffect(() => {
@@ -120,11 +126,26 @@ function BookingFlowContent() {
     }
   };
 
+  // Helper to load Razorpay Checkout script dynamically
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (typeof window === "undefined") return resolve(false);
+      if ((window as any).Razorpay) return resolve(true);
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
   const handleCreateOrderAndPay = async () => {
     setIsSubmitting(true);
     setErrorMsg(null);
 
     try {
+      // 1. Call server-side order creation (amount looked up from DB, never client)
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,14 +163,116 @@ function BookingFlowContent() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Order creation failed");
+        throw new Error(data.error || "Order creation failed on server");
       }
 
-      // Route to success page
-      router.push(`/book/success?order=${data.publicId}`);
+      // MANUAL UPI PROVIDER PATH
+      if (data.provider === "manual_upi") {
+        setUpiPaymentData(data.paymentData);
+        setStep(5);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // RAZORPAY PROVIDER PATH (if enabled in future)
+      const isScriptLoaded = await loadRazorpayScript();
+      if (!isScriptLoaded) {
+        throw new Error("Unable to load secure Razorpay payment gateway.");
+      }
+
+      const options = {
+        key: data.paymentData.keyId,
+        amount: data.paymentData.amount,
+        currency: data.paymentData.currency,
+        name: siteConfig.name,
+        description: `${selectedService.name} - Consultation`,
+        order_id: data.paymentData.razorpayOrderId,
+        prefill: {
+          name,
+          email,
+          contact: phone || undefined,
+        },
+        notes: {
+          public_id: data.publicId,
+          service_slug: selectedService.slug,
+        },
+        theme: {
+          color: "#7A2E45",
+        },
+        modal: {
+          ondismiss: () => {
+            setIsSubmitting(false);
+          },
+        },
+        handler: async (paymentResponse: any) => {
+          try {
+            setIsSubmitting(true);
+            const verifyRes = await fetch("/api/payments/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: paymentResponse.razorpay_order_id,
+                razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                razorpay_signature: paymentResponse.razorpay_signature,
+                publicId: data.publicId,
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok) {
+              throw new Error(verifyData.error || "Payment verification failed.");
+            }
+
+            router.push(`/book/success?order=${data.publicId}`);
+          } catch (verifyErr: any) {
+            setErrorMsg(verifyErr.message || "Payment verification failed.");
+            setIsSubmitting(false);
+          }
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
     } catch (err: any) {
       setErrorMsg(err.message || "An error occurred while creating your order.");
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmitUtr = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!upiPaymentData) return;
+
+    const trimmedUtr = utrInput.trim();
+    if (!/^[A-Za-z0-9]{12}$/.test(trimmedUtr)) {
+      setErrorMsg(
+        "Please enter a valid 12-digit UPI Transaction ID (UTR) from your GPay, PhonePe, or Paytm receipt."
+      );
+      return;
+    }
+
+    setIsSubmittingUtr(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/orders/submit-utr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicId: upiPaymentData.publicId,
+          utr: trimmedUtr,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to submit transaction reference.");
+      }
+
+      router.push(`/book/success?order=${upiPaymentData.publicId}`);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error submitting payment verification details.");
+      setIsSubmittingUtr(false);
     }
   };
 
@@ -630,12 +753,18 @@ function BookingFlowContent() {
                 <div className="text-xs text-ink-soft text-right">
                   <span>Server-verified</span>
                   <span className="block text-wine-600 font-mono">
-                    {currency === "USD"
+                    {currency === "USD" && isUSDPaymentsEnabled()
                       ? `${getServicePriceUSD(selectedService)} cents`
                       : `${selectedService.price_inr} paise`}
                   </span>
                 </div>
               </div>
+
+              {!isUSDPaymentsEnabled() && (
+                <div className="p-3 rounded-lg bg-blush-100/40 border border-blush-300 text-xs text-ink-soft text-center">
+                  ✨ International payments coming soon • All consultations are currently processed in INR via UPI, Cards, and NetBanking.
+                </div>
+              )}
 
               <div className="pt-4 flex items-center justify-between border-t border-blush-300">
                 <Button type="button" variant="outline" onClick={handlePrevStep} disabled={isSubmitting}>
@@ -648,9 +777,133 @@ function BookingFlowContent() {
                   onClick={handleCreateOrderAndPay}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Processing..." : `Pay ${formatPrice(selectedService)}`}
+                  {isSubmitting ? "Initiating..." : `Proceed to Payment (${formatPrice(selectedService)})`}
                 </Button>
               </div>
+            </Card>
+          )}
+
+          {/* STEP 5: MANUAL UPI PAYMENT & UTR SUBMISSION */}
+          {step === 5 && upiPaymentData && (
+            <Card className="max-w-2xl mx-auto p-8 sm:p-12 space-y-8 relative overflow-hidden">
+              <FloralCorner position="top-left" size={180} opacity={0.5} />
+
+              <div className="text-center space-y-2">
+                <span className="font-script text-3xl text-wine-600 block">step five</span>
+                <Heading level={2} size="h2" className="text-center">
+                  Scan & Pay via UPI
+                </Heading>
+                <p className="text-ink-soft text-sm">
+                  Complete payment in your UPI app and submit your 12-digit transaction ID below.
+                </p>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold">
+                  <Clock className="w-3.5 h-3.5 text-amber-700" />
+                  <span>30-Minute Hold Active • Reference: {upiPaymentData.publicId}</span>
+                </div>
+              </div>
+
+              {/* Order Quick Summary */}
+              <div className="bg-blush-100/50 p-4 rounded-xl border border-blush-300 flex items-center justify-between text-sm">
+                <div>
+                  <span className="text-ink-soft text-xs block uppercase tracking-wider">Consultation</span>
+                  <strong className="text-ink font-serif text-base">{upiPaymentData.serviceName}</strong>
+                </div>
+                <div className="text-right">
+                  <span className="text-ink-soft text-xs block uppercase tracking-wider">Amount to Transfer</span>
+                  <strong className="text-wine-600 font-serif text-2xl font-bold">
+                    ₹{upiPaymentData.amountRupees}
+                  </strong>
+                </div>
+              </div>
+
+              {/* QR Code and Payee Details Box */}
+              <div className="bg-ivory p-6 rounded-2xl border border-blush-300 text-center space-y-4 shadow-sm">
+                <div className="relative w-64 h-64 mx-auto rounded-xl p-2 bg-white border border-blush-300 shadow-inner flex items-center justify-center">
+                  {/* QR Code image generated server-side */}
+                  <img
+                    src={upiPaymentData.qrCodeDataUrl}
+                    alt="Scan UPI QR Code to Pay"
+                    className="w-full h-full object-contain rounded-lg"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-xs text-ink-soft block uppercase tracking-wider">Verified Payee</span>
+                  <p className="font-serif text-lg font-medium text-ink">{upiPaymentData.payeeName}</p>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <code className="text-xs font-mono font-bold bg-blush-100 px-3 py-1 rounded-full text-wine-700 border border-blush-300">
+                      {upiPaymentData.upiId}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(upiPaymentData.upiId);
+                        setCopiedUpi(true);
+                        setTimeout(() => setCopiedUpi(false), 2500);
+                      }}
+                      className="text-xs text-wine-600 hover:text-wine-700 font-semibold cursor-pointer underline"
+                    >
+                      {copiedUpi ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile Intent App Links */}
+                <div className="pt-2">
+                  <span className="text-xs text-ink-soft block mb-2 font-medium">Or tap to launch UPI app directly:</span>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <a
+                      href={upiPaymentData.upiLink}
+                      className="px-4 py-2 rounded-full bg-blush-100 border border-blush-300 text-xs font-semibold text-wine-700 hover:bg-blush-200 transition-colors shadow-xs"
+                    >
+                      Pay via GPay / PhonePe / Paytm / Any UPI
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* UTR Form */}
+              <form onSubmit={handleSubmitUtr} className="space-y-5 bg-paper p-6 rounded-2xl border border-blush-300">
+                <div className="space-y-1.5">
+                  <label htmlFor="utr-input" className="block text-sm font-semibold text-ink">
+                    12-Digit UPI Transaction ID / UTR <span className="text-wine-600">*</span>
+                  </label>
+                  <p className="text-xs text-ink-soft leading-relaxed">
+                    After completing the transfer, locate the 12-digit numeric Reference / UTR number in your banking app receipt and enter it below for verification.
+                  </p>
+                  <input
+                    id="utr-input"
+                    type="text"
+                    required
+                    maxLength={12}
+                    value={utrInput}
+                    onChange={(e) => setUtrInput(e.target.value.replace(/[^0-9]/g, "").slice(0, 12))}
+                    placeholder="e.g. 428938194821"
+                    className="w-full p-3 font-mono text-base tracking-wider rounded-xl border border-blush-300 bg-ivory focus:ring-2 focus:ring-wine-600 focus:outline-none"
+                  />
+                  <span className="text-[11px] text-ink-soft block text-right">
+                    {utrInput.length} / 12 digits
+                  </span>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <Link
+                    href={`/order/${upiPaymentData.publicId}`}
+                    className="text-xs text-ink-soft hover:text-wine-600 underline"
+                  >
+                    I&apos;ll pay later (Keep booking on hold)
+                  </Link>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    disabled={isSubmittingUtr || utrInput.trim().length !== 12}
+                  >
+                    {isSubmittingUtr ? "Submitting for Verification..." : "Submit UTR for Verification"}
+                  </Button>
+                </div>
+              </form>
             </Card>
           )}
         </Container>

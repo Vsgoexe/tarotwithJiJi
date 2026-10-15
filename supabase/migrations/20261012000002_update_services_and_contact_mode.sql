@@ -30,7 +30,7 @@ VALUES
         60,
         NULL,
         99900,
-        NULL,
+        3900,
         TRUE,
         1
     ),
@@ -42,7 +42,7 @@ VALUES
         10,
         NULL,
         20000,
-        NULL,
+        1200,
         TRUE,
         2
     ),
@@ -54,7 +54,7 @@ VALUES
         NULL,
         48,
         30000,
-        NULL,
+        1500,
         TRUE,
         3
     ),
@@ -66,7 +66,7 @@ VALUES
         NULL,
         48,
         30000,
-        NULL,
+        1500,
         TRUE,
         4
     ),
@@ -78,7 +78,7 @@ VALUES
         NULL,
         48,
         15000,
-        NULL,
+        900,
         TRUE,
         5
     ),
@@ -90,7 +90,7 @@ VALUES
         NULL,
         48,
         15000,
-        NULL,
+        900,
         TRUE,
         6
     ),
@@ -102,7 +102,7 @@ VALUES
         NULL,
         48,
         20000,
-        NULL,
+        1200,
         TRUE,
         7
     )
