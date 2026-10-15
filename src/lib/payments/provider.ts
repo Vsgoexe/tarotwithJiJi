@@ -72,7 +72,7 @@ export async function generateManualUPIData({
   qrCodeDataUrl: string;
 }> {
   const upiId = process.env.UPI_ID || "tarotwithjiji@okhdfcbank";
-  const payeeName = process.env.UPI_PAYEE_NAME || "Tarot with Jiji";
+  const payeeName = process.env.UPI_PAYEE_NAME || "jeevani V";
   const amountRupees = Math.round(amountPaise / 100);
 
   // Clean note/reference

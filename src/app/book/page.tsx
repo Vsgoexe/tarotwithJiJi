@@ -818,11 +818,14 @@ function BookingFlowContent() {
 
               {/* QR Code and Payee Details Box */}
               <div className="bg-ivory p-6 rounded-2xl border border-blush-300 text-center space-y-4 shadow-sm">
-                <div className="relative w-64 h-64 mx-auto rounded-xl p-2 bg-white border border-blush-300 shadow-inner flex items-center justify-center">
-                  {/* QR Code image generated server-side */}
+                <div className="relative w-64 h-80 mx-auto rounded-xl p-2 bg-white border border-blush-300 shadow-md flex items-center justify-center overflow-hidden">
+                  {/* Official Google Pay QR code image with dynamic fallback */}
                   <img
-                    src={upiPaymentData.qrCodeDataUrl}
-                    alt="Scan UPI QR Code to Pay"
+                    src="/images/upi-qr.jpg"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = upiPaymentData.qrCodeDataUrl;
+                    }}
+                    alt={`Scan to pay via UPI - ${upiPaymentData.payeeName}`}
                     className="w-full h-full object-contain rounded-lg"
                   />
                 </div>
