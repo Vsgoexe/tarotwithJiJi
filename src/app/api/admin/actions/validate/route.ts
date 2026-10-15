@@ -57,6 +57,9 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: any) {
+    if (err?.digest?.startsWith?.("NEXT_")) {
+      throw err;
+    }
     console.error("Action validation error:", err);
     return NextResponse.json({ error: "Failed to validate action" }, { status: 500 });
   }

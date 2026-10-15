@@ -37,6 +37,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ orders: formatted });
   } catch (err: any) {
+    if (err?.digest?.startsWith?.("NEXT_")) {
+      throw err;
+    }
     console.error("Admin orders GET exception:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
